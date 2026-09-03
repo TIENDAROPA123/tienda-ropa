@@ -5,90 +5,73 @@ const prisma = new PrismaClient();
 
 export const dynamic = 'force-dynamic';
 
-export async function PUT(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET() {
   try {
-    const { id } = await params;
-    const productId = parseInt(id, 10);
-
-    if (isNaN(productId)) {
-      return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
-    }
-
-    const body = await req.json();
-    const { title, basePrice, description, categoryName } = body;
-
-    let categoryId: number | undefined = undefined;
-
-    if (categoryName) {
-      const slug = categoryName
-        .toLowerCase()
-        .trim()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '');
-
-      let category = await prisma.category.findFirst({
-        where: {
-          OR: [
-            { name: { equals: categoryName.trim(), mode: 'insensitive' } },
-            { slug },
-          ],
-        },
-      });
-
-      if (!category) {
-        category = await prisma.category.create({
-          data: {
-            name: categoryName.trim(),
-            slug: slug || `cat-${Date.now()}`,
-          },
-        });
-      }
-      categoryId = category.id;
-    }
-
-    const updated = await prisma.product.update({
-      where: { id: productId },
-      data: {
-        ...(title && { title }),
-        ...(basePrice !== undefined && { basePrice: parseFloat(basePrice) }),
-        ...(description !== undefined && { description }),
-        ...(categoryId && { categoryId }),
+    const products = await prisma.product.findMany({
+      include: {
+        category: true,
+        variants: true,
       },
+      orderBy: { createdAt: 'desc' },
     });
-
-    return NextResponse.json({ success: true, product: updated });
+    return NextResponse.json(products);
   } catch (error: any) {
-    console.error('Error en PUT /api/admin/products/[id]:', error);
-    return NextResponse.json({ error: error.message || 'Error al actualizar producto' }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
-export async function DELETE(
-  _req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST(req: Request) {
   try {
-    const { id } = await params;
-    const productId = parseInt(id, 10);
+    const body = await req.json();
+    const { title, description, basePrice, imageUrl, categoryName, variants } = body;
 
-    if (isNaN(productId)) {
-      return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
+    const slug = (categoryName || 'General')
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+    let category = await prisma.category.findFirst({
+      where: {
+        OR: [
+          { name: { equals: categoryName?.trim() || 'General', mode: 'insensitive' } },
+          { slug },
+        ],
+      },
+    });
+
+    if (!category) {
+      category = await prisma.category.create({
+        data: {
+          name: categoryName?.trim() || 'General',
+          slug: slug || `cat-${Date.now()}`,
+        },
+      });
     }
 
-    await prisma.productVariant.deleteMany({
-      where: { productId },
+    const product = await prisma.product.create({
+      data: {
+        title,
+        description: description || '',
+        basePrice: parseFloat(basePrice),
+        imageUrl: imageUrl || '',
+        categoryId: category.id,
+        variants: {
+          create: (variants || []).map((v: any) => ({
+            size: v.size,
+            stock: parseInt(v.stock, 10) || 0,
+          })),
+        },
+      },
+      include: {
+        variants: true,
+        category: true,
+      },
     });
 
-    await prisma.product.delete({
-      where: { id: productId },
-    });
-
-    return NextResponse.json({ success: true });
+    return NextResponse.json(product, { status: 201 });
   } catch (error: any) {
-    console.error('Error en DELETE /api/admin/products/[id]:', error);
-    return NextResponse.json({ error: error.message || 'Error al eliminar producto' }, { status: 500 });
+    console.error('Error en POST /api/admin/products:', error);
+    return NextResponse.json({ error: error.message || 'Error al crear producto' }, { status: 500 });
   }
 }
