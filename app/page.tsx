@@ -1,11 +1,13 @@
 import { PrismaClient } from '@prisma/client';
+import ProductClient from './ProductClient';
 
 const prisma = new PrismaClient();
 
 export const dynamic = 'force-dynamic';
 
 export default async function HomePage() {
-  const products = await prisma.product.findMany({
+  // Obtenemos los productos de la base de datos
+  const rawProducts = await prisma.product.findMany({
     include: {
       variants: true,
       category: true,
@@ -15,76 +17,53 @@ export default async function HomePage() {
     },
   });
 
-  return (
-    <main style={{ minHeight: '100vh', backgroundColor: '#f9fafb', padding: '40px 20px', fontFamily: 'sans-serif' }}>
-      <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
-        <header style={{ marginBottom: '32px' }}>
-          <h1 style={{ fontSize: '28px', fontWeight: 'bold', color: '#111827', margin: 0 }}>Catálogo de Ropa</h1>
-          <p style={{ color: '#6b7280', margin: '4px 0 0 0', fontSize: '14px' }}>Prendas disponibles en inventario</p>
-        </header>
+  // Si aún no hay productos en la base de datos, mostramos un estado vacío amigable
+  if (rawProducts.length === 0) {
+    return (
+      <main className="min-h-screen bg-neutral-50 flex items-center justify-center p-6 text-center">
+        <div>
+          <h1 className="text-2xl font-bold text-neutral-900 mb-2">No hay prendas disponibles</h1>
+          <p className="text-sm text-neutral-500">Pronto agregaremos nuevas colecciones al catálogo.</p>
+        </div>
+      </main>
+    );
+  }
 
-        {products.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '60px 20px', backgroundColor: '#ffffff', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
-            <p style={{ color: '#6b7280', fontSize: '16px', margin: 0 }}>No hay prendas disponibles en este momento.</p>
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '24px' }}>
-            {products.map((product) => {
-              const firstVariant = product.variants[0];
-              const imageUrl = firstVariant?.images?.[0] || '';
-              const price = Number(product.basePrice).toFixed(2);
+  // Tomamos el producto más reciente como principal y convertimos basePrice a número
+  const mainRaw = rawProducts[0];
+  const productData = {
+    id: mainRaw.id,
+    title: mainRaw.title,
+    slug: mainRaw.slug,
+    description: mainRaw.description,
+    basePrice: Number(mainRaw.basePrice),
+    compositionCare: '100% Algodón peinado de alto gramaje. Lavar con agua fría.',
+    shippingReturns: 'Envíos a todo el país en 2 a 4 días hábiles.',
+    variants: mainRaw.variants.map((v) => ({
+      id: v.id,
+      sku: v.sku,
+      size: v.size,
+      colorName: v.colorName,
+      colorHex: v.colorHex,
+      stock: v.stock,
+      images: v.images,
+    })),
+  };
 
-              return (
-                <div
-                  key={product.id}
-                  style={{
-                    backgroundColor: '#ffffff',
-                    borderRadius: '12px',
-                    border: '1px solid #e5e7eb',
-                    overflow: 'hidden',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                  }}
-                >
-                  {imageUrl ? (
-                    <img
-                      src={imageUrl}
-                      alt={product.title}
-                      style={{ width: '100%', height: '260px', objectFit: 'cover' }}
-                    />
-                  ) : (
-                    <div style={{ width: '100%', height: '260px', backgroundColor: '#e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af' }}>
-                      Sin foto
-                    </div>
-                  )}
-                  <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', flexGrow: 1 }}>
-                    <span style={{ fontSize: '12px', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                      {product.category?.name || 'General'}
-                    </span>
-                    <h2 style={{ fontSize: '16px', fontWeight: '600', color: '#111827', margin: '6px 0' }}>
-                      {product.title}
-                    </h2>
-                    <p style={{ fontSize: '13px', color: '#6b7280', margin: '0 0 12px 0', flexGrow: 1, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                      {product.description}
-                    </p>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '10px', borderTop: '1px solid #f3f4f6' }}>
-                      <span style={{ fontSize: '18px', fontWeight: 'bold', color: '#111827' }}>
-                        Q{price}
-                      </span>
-                      {firstVariant && (
-                        <span style={{ fontSize: '12px', backgroundColor: '#f3f4f6', padding: '3px 8px', borderRadius: '4px', color: '#374151' }}>
-                          Talla {firstVariant.size}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </main>
-  );
+  // Si hay más productos, usamos el segundo como recomendación (cross-sell)
+  let crossSellData = null;
+  if (rawProducts.length > 1) {
+    const secondRaw = rawProducts[1];
+    const firstVariant = secondRaw.variants[0];
+    crossSellData = {
+      id: secondRaw.id,
+      title: secondRaw.title,
+      price: Number(secondRaw.basePrice),
+      image: firstVariant?.images?.[0] || 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?w=800&q=80',
+      size: firstVariant?.size || 'M',
+      color: firstVariant?.colorName || 'Negro',
+    };
+  }
+
+  return <ProductClient product={productData} crossSell={crossSellData} />;
 }
