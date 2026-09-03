@@ -8,7 +8,7 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { title, description, basePrice, categoryId, size, color, stock, imageUrl } = body;
 
-    // 1. Generar slug automático para la URL
+    // Generar slug limpio
     const slug = title
       .toLowerCase()
       .trim()
@@ -17,27 +17,27 @@ export async function POST(req: Request) {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
 
-    // 2. Generar código SKU automático (ej: PLAY-NEG-M-482)
+    // Generar código SKU automático
     const codeTitle = title.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase();
     const codeColor = color.replace(/[^a-zA-Z0-9]/g, '').slice(0, 3).toUpperCase();
     const randomNum = Math.floor(100 + Math.random() * 900);
     const sku = `${codeTitle}-${codeColor}-${size.toUpperCase()}-${randomNum}`;
 
-    // 3. Guardar producto con su variante e imagen en Neon
+    // Crear producto y su variante en la base de datos
     const product = await prisma.product.create({
       data: {
         title,
         slug,
         description,
         basePrice: parseFloat(basePrice),
-        categoryId: parseInt(categoryId),
+        categoryId: parseInt(categoryId, 10),
         variants: {
           create: [
             {
               sku,
               size,
               color,
-              stock: parseInt(stock),
+              stock: parseInt(stock, 10),
               imageUrl,
             },
           ],
