@@ -3,7 +3,8 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-// 1. OBTENER LISTA DE PRODUCTOS (Soluciona el conteo en 0)
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const rawProducts = await prisma.product.findMany({
@@ -38,7 +39,6 @@ export async function GET() {
   }
 }
 
-// 2. CREAR NUEVO PRODUCTO CON SECCIÓN Y TALLAS MÚLTIPLES
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -48,7 +48,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Faltan campos obligatorios o tallas' }, { status: 400 });
     }
 
-    // Buscar o registrar la sección/categoría
     const categorySlug = categoryName
       .toLowerCase()
       .trim()
