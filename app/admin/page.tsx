@@ -7,16 +7,13 @@ export default function AdminPage() {
   const [description, setDescription] = useState('');
   const [basePrice, setBasePrice] = useState('');
   const [categoryId, setCategoryId] = useState('1');
-
   const [size, setSize] = useState('M');
   const [color, setColor] = useState('Negro');
   const [stock, setStock] = useState('10');
   const [imageUrl, setImageUrl] = useState('');
-
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState('');
 
-  // Convierte el archivo seleccionado de tu PC a formato directo
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -31,7 +28,7 @@ export default function AdminPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!imageUrl) {
-      setMensaje('⚠️ Selecciona una foto desde tu computadora.');
+      setMensaje('⚠️ Debes seleccionar una foto para la prenda.');
       return;
     }
 
@@ -57,7 +54,7 @@ export default function AdminPage() {
       const data = await res.json();
 
       if (res.ok) {
-        setMensaje(`✅ ¡Guardado con éxito! Código automático generado: ${data.variants?.[0]?.sku}`);
+        setMensaje(`✅ ¡Prenda guardada! SKU generado: ${data.variants?.[0]?.sku}`);
         setTitle('');
         setDescription('');
         setBasePrice('');
@@ -66,7 +63,7 @@ export default function AdminPage() {
         setMensaje(`❌ Error: ${data.error}`);
       }
     } catch (err: any) {
-      setMensaje(`❌ Error de conexión: ${err.message}`);
+      setMensaje(`❌ Error de red: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -75,8 +72,8 @@ export default function AdminPage() {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', padding: '40px 16px', fontFamily: 'sans-serif' }}>
       <div style={{ maxWidth: '600px', margin: '0 auto', backgroundColor: '#ffffff', borderRadius: '12px', padding: '28px', boxShadow: '0 4px 12px rgba(0,0,0,0.06)' }}>
-        <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#111827', marginBottom: '6px' }}>Subir Nuevo Producto</h1>
-        <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '24px' }}>El código de prenda (SKU) y la URL de imagen se crearán automáticamente.</p>
+        <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#111827', marginBottom: '6px' }}>Panel de Administración</h1>
+        <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '24px' }}>Sube prendas: el SKU y la foto se configuran de forma automática.</p>
 
         {mensaje && (
           <div style={{ padding: '12px 16px', borderRadius: '8px', marginBottom: '20px', fontSize: '14px', backgroundColor: mensaje.startsWith('✅') ? '#ecfdf5' : '#fef2f2', color: mensaje.startsWith('✅') ? '#065f46' : '#991b1b', border: `1px solid ${mensaje.startsWith('✅') ? '#a7f3d0' : '#fecaca'}` }}>
@@ -84,13 +81,13 @@ export default function AdminPage() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div>
             <label style={{ display: 'block', fontWeight: '600', fontSize: '14px', color: '#374151', marginBottom: '6px' }}>Nombre de la prenda</label>
             <input
               type="text"
               required
-              placeholder="Ej: Playera Heavyweight"
+              placeholder="Ej: Camiseta Boxy Fit"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '15px', boxSizing: 'border-box' }}
@@ -102,7 +99,7 @@ export default function AdminPage() {
             <textarea
               required
               rows={3}
-              placeholder="Material, corte, detalles..."
+              placeholder="Detalles de tela, corte, etc."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '15px', boxSizing: 'border-box' }}
@@ -111,7 +108,7 @@ export default function AdminPage() {
 
           <div style={{ display: 'flex', gap: '12px' }}>
             <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', fontWeight: '600', fontSize: '14px', color: '#374151', marginBottom: '6px' }}>Precio Base</label>
+              <label style={{ display: 'block', fontWeight: '600', fontSize: '14px', color: '#374151', marginBottom: '6px' }}>Precio</label>
               <input
                 type="number"
                 step="0.01"
@@ -123,7 +120,7 @@ export default function AdminPage() {
               />
             </div>
             <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', fontWeight: '600', fontSize: '14px', color: '#374151', marginBottom: '6px' }}>ID de Categoría</label>
+              <label style={{ display: 'block', fontWeight: '600', fontSize: '14px', color: '#374151', marginBottom: '6px' }}>ID Categoría</label>
               <input
                 type="number"
                 required
@@ -134,7 +131,7 @@ export default function AdminPage() {
             </div>
           </div>
 
-          <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '18px', display: 'flex', gap: '12px' }}>
+          <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '16px', display: 'flex', gap: '12px' }}>
             <div style={{ flex: 1 }}>
               <label style={{ display: 'block', fontWeight: '600', fontSize: '14px', color: '#374151', marginBottom: '6px' }}>Talla</label>
               <select
@@ -171,8 +168,8 @@ export default function AdminPage() {
             </div>
           </div>
 
-          <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '18px' }}>
-            <label style={{ display: 'block', fontWeight: '600', fontSize: '14px', color: '#374151', marginBottom: '6px' }}>Foto desde tu equipo</label>
+          <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>
+            <label style={{ display: 'block', fontWeight: '600', fontSize: '14px', color: '#374151', marginBottom: '6px' }}>Foto desde tu computadora</label>
             <input
               type="file"
               accept="image/*"
