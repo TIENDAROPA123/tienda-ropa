@@ -1,10 +1,24 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 const AVAILABLE_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
 
+interface ProductItem {
+  id: number;
+  title: string;
+  description: string;
+  basePrice: number;
+  category?: { name: string };
+  variants: { id: number; size: string; stock: number; images: string[] }[];
+}
+
 export default function AdminPage() {
+  const [activeTab, setActiveTab] = useState<'create' | 'list'>('create');
+  const [productsList, setProductsList] = useState<ProductItem[]>([]);
+  const [loadingList, setLoadingList] = useState(false);
+
+  // Formulario nuevo
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [basePrice, setBasePrice] = useState('');
@@ -13,7 +27,6 @@ export default function AdminPage() {
   const [color, setColor] = useState('Negro');
   const [imageFile, setImageFile] = useState<File | null>(null);
 
-  // Control de múltiples tallas y stock
   const [selectedSizes, setSelectedSizes] = useState<{ [key: string]: { enabled: boolean; stock: number } }>({
     S: { enabled: true, stock: 10 },
     M: { enabled: true, stock: 10 },
@@ -24,23 +37,43 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // Estado para editar
+  const [editingProduct, setEditingProduct] = useState<ProductItem | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editPrice, setEditPrice] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editCategory, setEditCategory] = useState('');
+
+  const fetchProducts = async () => {
+    setLoadingList(true);
+    try {
+      const res = await fetch('/api/admin/products');
+      const data = await res.json();
+      if (data.products) setProductsList(data.products);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingList(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'list') {
+      fetchProducts();
+    }
+  }, [activeTab]);
+
   const toggleSize = (sz: string) => {
     setSelectedSizes((prev) => ({
       ...prev,
-      [sz]: {
-        enabled: !prev[sz]?.enabled,
-        stock: prev[sz]?.stock || 10,
-      },
+      [sz]: { enabled: !prev[sz]?.enabled, stock: prev[sz]?.stock || 10 },
     }));
   };
 
   const handleStockChange = (sz: string, val: number) => {
     setSelectedSizes((prev) => ({
       ...prev,
-      [sz]: {
-        ...prev[sz],
-        stock: val >= 0 ? val : 0,
-      },
+      [sz]: { ...prev[sz], stock: val >= 0 ? val : 0 },
     }));
   };
 
@@ -54,16 +87,11 @@ export default function AdminPage() {
         .filter(([_, data]) => data.enabled)
         .map(([size, data]) => ({ size, stock: data.stock }));
 
-      if (activeSizes.length === 0) {
-        throw new Error('Debes seleccionar al menos una talla con stock.');
-      }
+      if (activeSizes.length === 0) throw new Error('Selecciona al menos una talla con stock.');
 
       const finalCategory = categoryName === 'OTRA' ? customCategory.trim() : categoryName.trim();
-      if (!finalCategory) {
-        throw new Error('Especifica la categoría para el producto.');
-      }
+      if (!finalCategory) throw new Error('Especifica la categoría.');
 
-      // Convertir archivo a base64 si se adjuntó
       let base64Image = '';
       if (imageFile) {
         base64Image = await new Promise((resolve, reject) => {
@@ -89,9 +117,9 @@ export default function AdminPage() {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Error al guardar la prenda');
+      if (!res.ok) throw new Error(data.error || 'Error al guardar');
 
-      setMessage({ type: 'success', text: `¡Prenda publicada con ${activeSizes.length} tallas en categoría "${finalCategory}"!` });
+      setMessage({ type: 'success', text: `¡Prenda publicada con éxito en "${finalCategory}"!` });
       setTitle('');
       setDescription('');
       setBasePrice('');
@@ -103,87 +131,262 @@ export default function AdminPage() {
     }
   };
 
-  return (
-    <main style={{ minHeight: '100vh', backgroundColor: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '30px 15px', fontFamily: 'sans-serif' }}>
-      <div style={{ backgroundColor: '#ffffff', borderRadius: '16px', border: '1px solid #e5e7eb', padding: '32px', maxWidth: '560px', width: '100%', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-        <h1 style={{ fontSize: '22px', fontWeight: 'bold', margin: '0 0 4px 0', color: '#111827' }}>Panel de Administración</h1>
-        <p style={{ color: '#6b7280', fontSize: '13px', margin: '0 0 24px 0' }}>Agrega categorías, tallas simultáneas y stock por prenda.</p>
+  // ELIMINAR PRODUCTO
+  const handleDelete = async (id: number, productTitle: string) => {
+    if (!confirm(`¿Seguro que deseas eliminar permanentemente "${productTitle}"?`)) return;
 
-        {message && (
-          <div style={{ padding: '12px', borderRadius: '8px', marginBottom: '20px', fontSize: '13px', backgroundColor: message.type === 'success' ? '#ecfdf5' : '#fef2f2', color: message.type === 'success' ? '#065f46' : '#991b1b', border: `1px solid ${message.type === 'success' ? '#a7f3d0' : '#fecaca'}` }}>
-            {message.text}
+    try {
+      const res = await fetch(`/api/admin/products/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('No se pudo eliminar');
+      setProductsList((prev) => prev.filter((p) => p.id !== id));
+      alert('Producto eliminado con éxito.');
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  // ABRIR MODAL EDICIÓN
+  const openEditModal = (p: ProductItem) => {
+    setEditingProduct(p);
+    setEditTitle(p.title);
+    setEditPrice(p.basePrice.toString());
+    setEditDescription(p.description || '');
+    setEditCategory(p.category?.name || 'Pantalones');
+  };
+
+  // GUARDAR EDICIÓN
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProduct) return;
+
+    try {
+      const res = await fetch(`/api/admin/products/${editingProduct.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: editTitle,
+          basePrice: editPrice,
+          description: editDescription,
+          categoryName: editCategory,
+        }),
+      });
+
+      if (!res.ok) throw new Error('Error al actualizar');
+      alert('¡Producto modificado con éxito!');
+      setEditingProduct(null);
+      fetchProducts();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  return (
+    <main style={{ minHeight: '100vh', backgroundColor: '#f3f4f6', padding: '30px 15px', fontFamily: 'sans-serif' }}>
+      <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+        {/* Pestañas Superiores */}
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+          <button
+            onClick={() => setActiveTab('create')}
+            style={{
+              padding: '10px 18px',
+              borderRadius: '8px',
+              border: 'none',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              backgroundColor: activeTab === 'create' ? '#111827' : '#e5e7eb',
+              color: activeTab === 'create' ? '#ffffff' : '#374151',
+            }}
+          >
+            + Subir Nueva Prenda
+          </button>
+          <button
+            onClick={() => setActiveTab('list')}
+            style={{
+              padding: '10px 18px',
+              borderRadius: '8px',
+              border: 'none',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              backgroundColor: activeTab === 'list' ? '#111827' : '#e5e7eb',
+              color: activeTab === 'list' ? '#ffffff' : '#374151',
+            }}
+          >
+            📋 Gestionar / Modificar Prendas
+          </button>
+        </div>
+
+        {/* PESTAÑA 1: FORMULARIO CREAR */}
+        {activeTab === 'create' && (
+          <div style={{ backgroundColor: '#ffffff', borderRadius: '16px', border: '1px solid #e5e7eb', padding: '30px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+            <h1 style={{ fontSize: '20px', fontWeight: 'bold', margin: '0 0 4px 0', color: '#111827' }}>Subir Nueva Prenda</h1>
+            <p style={{ color: '#6b7280', fontSize: '13px', margin: '0 0 20px 0' }}>Define sección y tallas múltiples para la prenda.</p>
+
+            {message && (
+              <div style={{ padding: '12px', borderRadius: '8px', marginBottom: '16px', fontSize: '13px', backgroundColor: message.type === 'success' ? '#ecfdf5' : '#fef2f2', color: message.type === 'success' ? '#065f46' : '#991b1b' }}>
+                {message.text}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px' }}>Nombre</label>
+                <input required type="text" placeholder="Ej: Pantalón Cargo Oversize" value={title} onChange={(e) => setTitle(e.target.value)} style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '8px', boxSizing: 'border-box' }} />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px' }}>Descripción</label>
+                <textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '8px', boxSizing: 'border-box' }} />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px' }}>Precio (Q)</label>
+                  <input required type="number" step="0.01" value={basePrice} onChange={(e) => setBasePrice(e.target.value)} style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '8px', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px' }}>Color</label>
+                  <input type="text" value={color} onChange={(e) => setColor(e.target.value)} style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '8px', boxSizing: 'border-box' }} />
+                </div>
+              </div>
+
+              <div style={{ backgroundColor: '#f9fafb', padding: '14px', borderRadius: '10px', border: '1px solid #e5e7eb' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px' }}>Sección / Categoría</label>
+                <select value={categoryName} onChange={(e) => setCategoryName(e.target.value)} style={{ width: '100%', padding: '9px', border: '1px solid #d1d5db', borderRadius: '8px', backgroundColor: '#fff', marginBottom: categoryName === 'OTRA' ? '10px' : '0' }}>
+                  <option value="Pantalones">Pantalones</option>
+                  <option value="Sudaderas & Hoodies">Sudaderas & Hoodies</option>
+                  <option value="Playeras & Tops">Playeras & Tops</option>
+                  <option value="Accesorios">Accesorios</option>
+                  <option value="OTRA">+ Crear nueva sección personalizada...</option>
+                </select>
+                {categoryName === 'OTRA' && (
+                  <input required type="text" placeholder="Nombre de la nueva categoría..." value={customCategory} onChange={(e) => setCustomCategory(e.target.value)} style={{ width: '100%', padding: '9px', border: '1px solid #d1d5db', borderRadius: '8px', boxSizing: 'border-box' }} />
+                )}
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '8px' }}>Tallas y Stock</label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+                  {AVAILABLE_SIZES.map((sz) => {
+                    const isChecked = !!selectedSizes[sz]?.enabled;
+                    return (
+                      <div key={sz} style={{ border: `1px solid ${isChecked ? '#111827' : '#e5e7eb'}`, padding: '8px', borderRadius: '8px' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', marginBottom: '4px' }}>
+                          <input type="checkbox" checked={isChecked} onChange={() => toggleSize(sz)} />
+                          Talla {sz}
+                        </label>
+                        {isChecked && (
+                          <input type="number" min="0" value={selectedSizes[sz]?.stock ?? 10} onChange={(e) => handleStockChange(sz, parseInt(e.target.value, 10))} placeholder="Stock" style={{ width: '100%', padding: '4px', fontSize: '12px', border: '1px solid #cbd5e1', borderRadius: '4px', boxSizing: 'border-box' }} />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px' }}>Foto</label>
+                <input type="file" accept="image/*" onChange={(e) => setImageFile(e.target.files?.[0] || null)} style={{ fontSize: '13px' }} />
+              </div>
+
+              <button type="submit" disabled={loading} style={{ padding: '14px', backgroundColor: '#111827', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>
+                {loading ? 'Guardando...' : 'Publicar Prenda'}
+              </button>
+            </form>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div>
-            <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Nombre de la prenda</label>
-            <input required type="text" placeholder="Ej: Pantalón Cargo Oversize" value={title} onChange={(e) => setTitle(e.target.value)} style={{ width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: '8px', boxSizing: 'border-box' }} />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Descripción</label>
-            <textarea rows={3} placeholder="Detalles de corte, tela o ajustes..." value={description} onChange={(e) => setDescription(e.target.value)} style={{ width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: '8px', boxSizing: 'border-box' }} />
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Precio (Q)</label>
-              <input required type="number" step="0.01" placeholder="150.00" value={basePrice} onChange={(e) => setBasePrice(e.target.value)} style={{ width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: '8px', boxSizing: 'border-box' }} />
+        {/* PESTAÑA 2: LISTA DE PRODUCTOS (MODIFICAR Y ELIMINAR) */}
+        {activeTab === 'list' && (
+          <div style={{ backgroundColor: '#ffffff', borderRadius: '16px', border: '1px solid #e5e7eb', padding: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0 }}>Prendas en Inventario ({productsList.length})</h2>
+              <button onClick={fetchProducts} style={{ fontSize: '12px', padding: '6px 12px', borderRadius: '6px', border: '1px solid #d1d5db', cursor: 'pointer', backgroundColor: '#fff' }}>Refrescar</button>
             </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Color principal</label>
-              <input type="text" placeholder="Ej: Negro" value={color} onChange={(e) => setColor(e.target.value)} style={{ width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: '8px', boxSizing: 'border-box' }} />
-            </div>
-          </div>
 
-          {/* Categoría o Sección */}
-          <div style={{ backgroundColor: '#f9fafb', padding: '14px', borderRadius: '10px', border: '1px solid #e5e7eb' }}>
-            <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Sección / Categoría</label>
-            <select value={categoryName} onChange={(e) => setCategoryName(e.target.value)} style={{ width: '100%', padding: '9px 12px', border: '1px solid #d1d5db', borderRadius: '8px', backgroundColor: '#fff', marginBottom: categoryName === 'OTRA' ? '10px' : '0' }}>
-              <option value="Pantalones">Pantalones</option>
-              <option value="Sudaderas & Hoodies">Sudaderas & Hoodies</option>
-              <option value="Playeras & Tops">Playeras & Tops</option>
-              <option value="Accesorios">Accesorios</option>
-              <option value="OTRA">+ Crear nueva sección personalizada...</option>
-            </select>
+            {loadingList ? (
+              <p style={{ color: '#6b7280', fontSize: '14px' }}>Cargando prendas...</p>
+            ) : productsList.length === 0 ? (
+              <p style={{ color: '#6b7280', fontSize: '14px' }}>No hay prendas en la base de datos.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {productsList.map((p) => {
+                  const img = p.variants[0]?.images?.[0] || '';
+                  return (
+                    <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px', border: '1px solid #e5e7eb', borderRadius: '10px', backgroundColor: '#fafafa' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                        {img ? (
+                          <img src={img} alt={p.title} style={{ width: '50px', height: '60px', objectFit: 'cover', borderRadius: '6px' }} />
+                        ) : (
+                          <div style={{ width: '50px', height: '60px', backgroundColor: '#e5e7eb', borderRadius: '6px' }} />
+                        )}
+                        <div>
+                          <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 'bold', color: '#111827' }}>{p.title}</h4>
+                          <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#6b7280' }}>
+                            {p.category?.name || 'Sin categoría'} &bull; <strong style={{ color: '#111827' }}>Q{Number(p.basePrice).toFixed(2)}</strong>
+                          </p>
+                          <p style={{ margin: '2px 0 0 0', fontSize: '11px', color: '#9ca3af' }}>
+                            Tallas: {p.variants.map((v) => `${v.size}(${v.stock})`).join(', ')}
+                          </p>
+                        </div>
+                      </div>
 
-            {categoryName === 'OTRA' && (
-              <input required type="text" placeholder="Escribe el nombre de la nueva categoría..." value={customCategory} onChange={(e) => setCustomCategory(e.target.value)} style={{ width: '100%', padding: '9px 12px', border: '1px solid #d1d5db', borderRadius: '8px', boxSizing: 'border-box' }} />
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          onClick={() => openEditModal(p)}
+                          style={{ padding: '6px 12px', backgroundColor: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
+                        >
+                          Modificar
+                        </button>
+                        <button
+                          onClick={() => handleDelete(p.id, p.title)}
+                          style={{ padding: '6px 12px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
+        )}
 
-          {/* Selección de Tallas y Stock */}
-          <div>
-            <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '8px' }}>Tallas y Stock disponible</label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
-              {AVAILABLE_SIZES.map((sz) => {
-                const isChecked = !!selectedSizes[sz]?.enabled;
-                const stockVal = selectedSizes[sz]?.stock ?? 10;
-                return (
-                  <div key={sz} style={{ border: `1px solid ${isChecked ? '#111827' : '#e5e7eb'}`, backgroundColor: isChecked ? '#f8fafc' : '#fff', padding: '8px', borderRadius: '8px' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', marginBottom: '6px' }}>
-                      <input type="checkbox" checked={isChecked} onChange={() => toggleSize(sz)} />
-                      Talla {sz}
-                    </label>
-                    {isChecked && (
-                      <input type="number" min="0" value={stockVal} onChange={(e) => handleStockChange(sz, parseInt(e.target.value, 10))} placeholder="Stock" style={{ width: '100%', padding: '4px 6px', fontSize: '12px', border: '1px solid #cbd5e1', borderRadius: '4px', boxSizing: 'border-box' }} />
-                    )}
-                  </div>
-                );
-              })}
+        {/* MODAL DE EDICIÓN */}
+        {editingProduct && (
+          <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', zIndex: 50 }}>
+            <div style={{ backgroundColor: '#fff', padding: '24px', borderRadius: '16px', maxWidth: '450px', width: '100%' }}>
+              <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: 'bold' }}>Modificar Prenda</h3>
+              <form onSubmit={handleSaveEdit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', marginBottom: '4px' }}>Nombre</label>
+                  <input type="text" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} required style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', marginBottom: '4px' }}>Precio (Q)</label>
+                  <input type="number" step="0.01" value={editPrice} onChange={(e) => setEditPrice(e.target.value)} required style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', marginBottom: '4px' }}>Categoría / Sección</label>
+                  <input type="text" value={editCategory} onChange={(e) => setEditCategory(e.target.value)} required style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', marginBottom: '4px' }}>Descripción</label>
+                  <textarea rows={2} value={editDescription} onChange={(e) => setEditDescription(e.target.value)} style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px', boxSizing: 'border-box' }} />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '10px' }}>
+                  <button type="button" onClick={() => setEditingProduct(null)} style={{ padding: '8px 14px', borderRadius: '6px', border: '1px solid #d1d5db', backgroundColor: '#fff', cursor: 'pointer' }}>
+                    Cancelar
+                  </button>
+                  <button type="submit" style={{ padding: '8px 14px', borderRadius: '6px', border: 'none', backgroundColor: '#111827', color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>
+                    Guardar Cambios
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Foto de la prenda</label>
-            <input type="file" accept="image/*" onChange={(e) => setImageFile(e.target.files?.[0] || null)} style={{ fontSize: '13px' }} />
-          </div>
-
-          <button type="submit" disabled={loading} style={{ marginTop: '10px', padding: '14px', backgroundColor: '#111827', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: loading ? 'not-allowed' : 'pointer', fontSize: '14px' }}>
-            {loading ? 'Guardando prenda...' : 'Publicar Prenda'}
-          </button>
-        </form>
+        )}
       </div>
     </main>
   );
