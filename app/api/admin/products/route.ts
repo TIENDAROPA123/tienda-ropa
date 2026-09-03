@@ -3,77 +3,92 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-export async function POST(req: Request) {
+export const dynamic = 'force-dynamic';
+
+export async function PUT(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
+    const { id } = await params;
+    const productId = parseInt(id, 10);
+
+    if (isNaN(productId)) {
+      return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
+    }
+
     const body = await req.json();
-    const { title, description, basePrice, categoryName, color, imageUrl, sizes } = body;
+    const { title, basePrice, description, categoryName } = body;
 
-    if (!title || !basePrice || !categoryName || !sizes || sizes.length === 0) {
-      return NextResponse.json({ error: 'Faltan campos obligatorios o tallas' }, { status: 400 });
-    }
+    let categoryId: number | undefined = undefined;
 
-    // 1. Generar o buscar la categoría por nombre (ej. "Pantalones")
-    const categorySlug = categoryName.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-    let category = await prisma.category.findFirst({
-      where: {
-        OR: [
-          { name: { equals: categoryName.trim(), mode: 'insensitive' } },
-          { slug: categorySlug }
-        ]
-      }
-    });
+    if (categoryName) {
+      const slug = categoryName
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
 
-    if (!category) {
-      category = await prisma.category.create({
-        data: {
-          name: categoryName.trim(),
-          slug: categorySlug || `cat-${Date.now()}`,
-        }
-      });
-    }
-
-    // 2. Generar slug del producto
-    const baseSlug = title.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-    const uniqueSlug = `${baseSlug}-${Math.floor(100 + Math.random() * 900)}`;
-
-    // 3. Preparar variantes para cada talla seleccionada
-    const prefix = title.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase();
-    const colPrefix = (color || 'GEN').replace(/[^a-zA-Z0-9]/g, '').slice(0, 3).toUpperCase();
-
-    const variantsData = sizes.map((item: { size: string; stock: number }) => {
-      const randomSuffix = Math.floor(100 + Math.random() * 900);
-      const sku = `${prefix}-${colPrefix}-${item.size.toUpperCase()}-${randomSuffix}`;
-      return {
-        sku,
-        size: item.size.toUpperCase(),
-        colorName: color || 'General',
-        colorHex: '#111827',
-        stock: Number(item.stock) || 0,
-        images: imageUrl ? [imageUrl] : [],
-      };
-    });
-
-    // 4. Guardar producto con todas sus variantes
-    const newProduct = await prisma.product.create({
-      data: {
-        title,
-        slug: uniqueSlug,
-        description: description || '',
-        basePrice: parseFloat(basePrice),
-        categoryId: category.id,
-        variants: {
-          create: variantsData,
+      let category = await prisma.category.findFirst({
+        where: {
+          OR: [
+            { name: { equals: categoryName.trim(), mode: 'insensitive' } },
+            { slug },
+          ],
         },
-      },
-      include: {
-        variants: true,
-        category: true,
+      });
+
+      if (!category) {
+        category = await prisma.category.create({
+          data: {
+            name: categoryName.trim(),
+            slug: slug || `cat-${Date.now()}`,
+          },
+        });
+      }
+      categoryId = category.id;
+    }
+
+    const updated = await prisma.product.update({
+      where: { id: productId },
+      data: {
+        ...(title && { title }),
+        ...(basePrice !== undefined && { basePrice: parseFloat(basePrice) }),
+        ...(description !== undefined && { description }),
+        ...(categoryId && { categoryId }),
       },
     });
 
-    return NextResponse.json({ success: true, product: newProduct });
+    return NextResponse.json({ success: true, product: updated });
   } catch (error: any) {
-    console.error('Error al crear producto:', error);
-    return NextResponse.json({ error: error.message || 'Error interno del servidor' }, { status: 500 });
+    console.error('Error en PUT /api/admin/products/[id]:', error);
+    return NextResponse.json({ error: error.message || 'Error al actualizar producto' }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const productId = parseInt(id, 10);
+
+    if (isNaN(productId)) {
+      return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
+    }
+
+    await prisma.productVariant.deleteMany({
+      where: { productId },
+    });
+
+    await prisma.product.delete({
+      where: { id: productId },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    console.error('Error en DELETE /api/admin/products/[id]:', error);
+    return NextResponse.json({ error: error.message || 'Error al eliminar producto' }, { status: 500 });
   }
 }
