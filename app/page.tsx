@@ -1,5 +1,4 @@
 import { PrismaClient } from '@prisma/client';
-import Link from 'next/link';
 
 const prisma = new PrismaClient();
 
@@ -19,33 +18,14 @@ export default async function HomePage() {
   return (
     <main style={{ minHeight: '100vh', backgroundColor: '#f9fafb', padding: '40px 20px', fontFamily: 'sans-serif' }}>
       <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
-        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
-          <div>
-            <h1 style={{ fontSize: '28px', fontWeight: 'bold', color: '#111827', margin: 0 }}>Catálogo de Ropa</h1>
-            <p style={{ color: '#6b7280', margin: '4px 0 0 0', fontSize: '14px' }}>Prendas disponibles en inventario</p>
-          </div>
-          <Link
-            href="/admin"
-            style={{
-              padding: '10px 18px',
-              backgroundColor: '#111827',
-              color: '#ffffff',
-              textDecoration: 'none',
-              borderRadius: '6px',
-              fontSize: '14px',
-              fontWeight: '600',
-            }}
-          >
-            + Subir Producto
-          </Link>
+        <header style={{ marginBottom: '32px' }}>
+          <h1 style={{ fontSize: '28px', fontWeight: 'bold', color: '#111827', margin: 0 }}>Catálogo de Ropa</h1>
+          <p style={{ color: '#6b7280', margin: '4px 0 0 0', fontSize: '14px' }}>Prendas disponibles en inventario</p>
         </header>
 
         {products.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 20px', backgroundColor: '#ffffff', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
-            <p style={{ color: '#6b7280', fontSize: '16px', margin: 0 }}>Aún no hay prendas registradas.</p>
-            <Link href="/admin" style={{ display: 'inline-block', marginTop: '12px', color: '#2563eb', textDecoration: 'underline', fontSize: '14px' }}>
-              Ir al panel de administración para agregar la primera
-            </Link>
+            <p style={{ color: '#6b7280', fontSize: '16px', margin: 0 }}>No hay prendas disponibles en este momento.</p>
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '24px' }}>
@@ -64,6 +44,7 @@ export default async function HomePage() {
                     overflow: 'hidden',
                     display: 'flex',
                     flexDirection: 'column',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
                   }}
                 >
                   {imageUrl ? (
